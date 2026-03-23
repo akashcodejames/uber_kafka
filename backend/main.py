@@ -19,16 +19,36 @@ import models
 from database import engine
 from routes import auth as auth_router
 from routes import google as google_router
+from routes import ws as ws_router
 
 load_dotenv()
 
 # Create all database tables on startup (idempotent)
 models.Base.metadata.create_all(bind=engine)
 
+from contextlib import asynccontextmanager
+
+from core.kafka_producer import close_kafka_producer, get_kafka_producer
+from core.redis_client import close_redis_client, get_redis_client
+from workers.location_processor import start_location_processor, stop_location_processor
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup actions
+    await get_redis_client()
+    await get_kafka_producer()
+    start_location_processor()
+    yield
+    # Shutdown actions
+    await stop_location_processor()
+    await close_kafka_producer()
+    await close_redis_client()
+
 app = FastAPI(
     title="Auth API",
     description="Full-stack authentication API with email/password and Google OAuth2.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ── Middleware ─────────────────────────────────────────────────────────────────
@@ -42,7 +62,12 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        FRONTEND_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +77,7 @@ app.add_middleware(
 
 app.include_router(auth_router.router)
 app.include_router(google_router.router)
+app.include_router(ws_router.router)
 
 
 # ── Health check ───────────────────────────────────────────────────────────────

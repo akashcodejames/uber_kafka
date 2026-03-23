@@ -32,5 +32,9 @@ class User(Base):
     # Only set for email/password users -- bcrypt hash, never plaintext
     hashed_password = Column(String, nullable=True)
 
+    # Ride-hailing specific fields
+    role = Column(String, default="user", server_default="user", nullable=False)
+    is_active_rider = Column(Integer, default=0, server_default="0", nullable=False) # Boolean represented as Integer
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

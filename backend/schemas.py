@@ -32,6 +32,8 @@ class UserOut(BaseModel):
     name: Optional[str] = None
     picture: Optional[str] = None
     google_id: Optional[str] = None
+    role: str
+    is_active_rider: bool
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

@@ -275,3 +275,115 @@
   font-weight: 700;
   flex-shrink: 0;
 }
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Location Dashboard Styles */
+.map-container {
+  flex-grow: 1;
+  position: relative;
+  min-height: calc(100vh - 72px); /* Subtract header height */
+  width: 100%;
+}
+
+.connection-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 16px;
+  border-radius: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  font-size: 0.9rem;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.connected .status-indicator {
+  background-color: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.disconnected .status-indicator {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+/* Mode Switch Toggle */
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 20px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.mode-toggle .active {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #e2e8f0;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #3b82f6; /* Rider mode color */
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+.slider.round {
+  border-radius: 26px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}

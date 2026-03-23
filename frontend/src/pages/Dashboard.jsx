@@ -1,44 +1,18 @@
 import { useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import api from "../api/axios";
 import "../styles/dashboard.css";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, logout, loading, login } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  // Handle Google OAuth redirect: /dashboard?token=<jwt>
-  useEffect(() => {
-    const tokenFromUrl = searchParams.get("token");
-    if (!tokenFromUrl) return;
-
-    const handleOAuthRedirect = async () => {
-      // Store token and clean it from URL for security
-      localStorage.setItem("token", tokenFromUrl);
-      setSearchParams({}, { replace: true });
-
-      try {
-        // Fetch the user profile with the new token
-        const { data } = await api.get("/auth/me", {
-          headers: { Authorization: `Bearer ${tokenFromUrl}` },
-        });
-        login(tokenFromUrl, data);
-      } catch {
-        navigate("/login");
-      }
-    };
-
-    handleOAuthRedirect();
-  }, []);
+  const { user, logout, loading } = useAuth();
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    if (!loading && !user && !searchParams.get("token")) {
+    if (!loading && !user) {
       navigate("/login", { replace: true });
     }
-  }, [loading, user, searchParams, navigate]);
+  }, [loading, user, navigate]);
 
   const handleLogout = () => {
     logout();
@@ -56,11 +30,11 @@ export default function Dashboard() {
   const authMethod = user.google_id ? "Google OAuth" : "Email & Password";
   const initials = user.name
     ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
     : user.email[0].toUpperCase();
 
   return (

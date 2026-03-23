@@ -5,7 +5,19 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser]   = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem("token"));
+  
+  // Check URL first (for Google OAuth), then local storage
+  const [token, setToken] = useState(() => {
+    const urlToken = new URLSearchParams(window.location.search).get("token");
+    if (urlToken) {
+      localStorage.setItem("token", urlToken);
+      // Clean URL silently
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return urlToken;
+    }
+    return localStorage.getItem("token");
+  });
+  
   const [loading, setLoading] = useState(true);
 
   // Fetch /auth/me whenever the token changes
