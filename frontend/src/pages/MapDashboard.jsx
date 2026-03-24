@@ -1,15 +1,14 @@
 import { useEffect, useState, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
-import { LogOut, MapPin, Navigation } from "lucide-react";
+import { LogOut, Map, Navigation, Wifi, WifiOff, MapPin } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import "leaflet/dist/leaflet.css";
-import "../styles/dashboard.css"; // Ensure styles allow map height
+import "../styles/dashboard.css"; 
 
-// Fix for default Leaflet marker icons not loading in React
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 
@@ -21,35 +20,40 @@ const defaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = defaultIcon;
 
-// Custom icon for Riders (using emoji/html)
-const riderIcon = L.divIcon({
-  html: `<div style="font-size: 24px;">🛵</div>`,
-  className: "rider-icon",
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
-
+// Custom animated ping icon for Riders
+const createRiderIcon = () => {
+  return L.divIcon({
+    html: `
+      <div class="rider-marker-container">
+        <div class="rider-marker-pulse"></div>
+        <div class="rider-marker-dot">🛵</div>
+      </div>
+    `,
+    className: "custom-rider-marker",
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+};
 
 export default function MapDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [isRiderMode, setIsRiderMode] = useState(false);
-  const [myLocation, setMyLocation] = useState([28.6139, 77.2090]); // Default to Delhi
-  const [activeRiders, setActiveRiders] = useState({}); // { riderId: {lat, lng} }
+  const [myLocation, setMyLocation] = useState([28.6139, 77.2090]); // Default
+  const [activeRiders, setActiveRiders] = useState({}); 
   
   const token = localStorage.getItem("token");
 
-  // Determine WS URL based on mode
   const wsUrl = isRiderMode
     ? `ws://localhost:8000/ws/rider?token=${token}`
     : `ws://localhost:8000/ws/user?token=${token}`;
 
   const { isConnected, lastMessage, sendMessage } = useWebSocket(wsUrl);
-
   const watchIdRef = useRef(null);
+  const riderIconAttr = createRiderIcon();
+  const lastSentTimeRef = useRef(0); // For throttling WebSocket usage
 
-  // Handle incoming rider updates (only really matters in User mode)
   useEffect(() => {
     if (lastMessage && !isRiderMode) {
       setActiveRiders((prev) => ({
@@ -59,41 +63,32 @@ export default function MapDashboard() {
     }
   }, [lastMessage, isRiderMode]);
 
-  // Handle Geolocation API for Rider Mode
   useEffect(() => {
-    if (isRiderMode) {
-      if (!navigator.geolocation) {
-        alert("Geolocation is not supported by your browser");
-        setIsRiderMode(false);
-        return;
-      }
-
-      // Start watching GPS
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          setMyLocation([lat, lng]);
-
-          // Send to Kafka backend
-          if (isConnected) {
-            sendMessage({ lat, lng });
-          }
-        },
-        (error) => {
-          console.error("Error watching position", error);
-        },
-        { enableHighAccuracy: true, maximumAge: 0 }
-      );
-    } else {
-      // User mode: get user location once just to center the map
-      navigator.geolocation.getCurrentPosition((pos) => {
-        setMyLocation([pos.coords.latitude, pos.coords.longitude]);
-      });
+    if (!navigator.geolocation) {
+      console.warn("Geolocation is not supported by your browser");
+      return;
     }
 
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setMyLocation([lat, lng]);
+
+        // Rate limit: Only send to Kafka backend max once every 2000 milliseconds (2 seconds)
+        if (isRiderMode && isConnected) {
+          const now = Date.now();
+          if (now - lastSentTimeRef.current >= 2000) {
+            sendMessage({ lat, lng });
+            lastSentTimeRef.current = now;
+          }
+        }
+      },
+      (error) => console.error("Error watching position", error),
+      { enableHighAccuracy: true, maximumAge: 0 }
+    );
+
     return () => {
-      // Clean up watch on mode change or unmount
       if (watchIdRef.current) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -115,94 +110,94 @@ export default function MapDashboard() {
   }
 
   return (
-    <div className="dashboard-page flex-col">
-      {/* Header Pipeline */}
-      <header className="dashboard-nav">
-        <div className="nav-brand">
-          <MapPin className="brand-icon-sm" style={{ color: "var(--clr-accent-light)" }} />
-          <span className="nav-brand-name">RideStream</span>
-        </div>
-
-        <div className="header-controls">
-          <div className="mode-toggle">
-            <span className={!isRiderMode ? "active" : ""}>User</span>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={isRiderMode}
-                onChange={(e) => {
-                  setIsRiderMode(e.target.checked);
-                  setActiveRiders({}); // clear riders when switching to rider mode
-                }}
-              />
-              <span className="slider round"></span>
-            </label>
-            <span className={isRiderMode ? "active" : ""}>Rider</span>
-          </div>
-
-          <div className="user-profile">
-            {user.picture ? (
-              <img src={user.picture} alt="Profile" className="profile-img" />
-            ) : (
-              <div className="profile-placeholder">{user.email[0].toUpperCase()}</div>
-            )}
-            <div className="user-info">
-              <span className="user-name">{user.name || "User"}</span>
-            </div>
-          </div>
-
-          <button onClick={handleLogout} className="btn-logout">
-            <LogOut size={18} />
-            <span>Logout</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Map Region */}
-      <main className="map-container">
-        {/* Connection Status Banner */}
-        <div className={`connection-banner ${isConnected ? "connected" : "disconnected"}`}>
-          <div className="status-indicator" />
-          <span>
-            {isConnected 
-              ? `Connected to Real-Time Network (${isRiderMode ? "Streaming Location" : "Listening for Riders"})` 
-              : "Reconnecting to Network..."}
-          </span>
-        </div>
-
-        <MapContainer center={myLocation} zoom={14} style={{ height: "calc(100vh - 74px)", width: "100%", zIndex: 0 }}>
-          <TileLayer
-            attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          
-          {/* Automatically center map on user when location updates */}
-          <MapCenterer position={myLocation} />
-
-          {/* User's Own Location */}
-          <Marker position={myLocation}>
-            <Popup>
-              {isRiderMode ? "Your Rider Location (Live)" : "Your Location"}
-            </Popup>
+    <div className="fullscreen-map-wrapper">
+      
+      {/* Background Map - Takes full screen */}
+      <MapContainer 
+        center={myLocation} 
+        zoom={14} 
+        zoomControl={false}
+        className="leaflet-fullscreen"
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+        />
+        <MapCenterer position={myLocation} />
+        <Marker position={myLocation}>
+          <Popup>{isRiderMode ? "Broadcasting Location" : "You are here"}</Popup>
+        </Marker>
+        {!isRiderMode && Object.entries(activeRiders).map(([riderId, pos]) => (
+          <Marker key={riderId} position={[pos.lat, pos.lng]} icon={riderIconAttr}>
+            <Popup>Rider {riderId}</Popup>
           </Marker>
+        ))}
+      </MapContainer>
 
-          {/* Render Active Riders on Map */}
-          {!isRiderMode && Object.entries(activeRiders).map(([riderId, pos]) => (
-            <Marker key={riderId} position={[pos.lat, pos.lng]} icon={riderIcon}>
-              <Popup>Rider {riderId}</Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      </main>
+      {/* Floating UI Elements */}
+      <div className="floating-ui-layer">
+        
+        {/* Top Header - Glassmorphic */}
+        <header className="glass-header">
+          <div className="brand-logo">
+            <div className="logo-icon-wrapper">
+              <MapPin size={22} className="logo-icon" />
+            </div>
+            <span className="brand-text">RideStream</span>
+          </div>
+
+          <div className="header-actions">
+            <div className={`status-pill ${isConnected ? 'online' : 'offline'}`}>
+              <div className="pulse-dot"></div>
+              <span>{isConnected ? 'Connected' : 'Connecting...'}</span>
+            </div>
+            
+            <div className="user-profile-mini">
+              {user.picture ? (
+                <img src={user.picture} alt="Profile" className="mini-avatar" />
+              ) : (
+                <div className="mini-avatar empty">{user.name?.[0] || "U"}</div>
+              )}
+            </div>
+
+            <button onClick={handleLogout} className="glass-btn icon-only" title="Logout">
+              <LogOut size={18} />
+            </button>
+          </div>
+        </header>
+
+        {/* Bottom floating dock for mode toggle */}
+        <div className="floating-dock-wrapper">
+          <div className="glass-dock">
+            <button 
+              className={`dock-btn ${!isRiderMode ? 'active' : ''}`}
+              onClick={() => { setIsRiderMode(false); setActiveRiders({}); }}
+            >
+              <Map size={20} />
+              <span>Looking for rides</span>
+            </button>
+
+            <div className="dock-divider"></div>
+
+            <button 
+              className={`dock-btn rider-btn ${isRiderMode ? 'active' : ''}`}
+              onClick={() => { setIsRiderMode(true); setActiveRiders({}); }}
+            >
+              <Navigation size={20} />
+              <span>I am riding</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
 
-// Helper component to center the map dynamically
 function MapCenterer({ position }) {
   const map = useMap();
   useEffect(() => {
-    map.flyTo(position, map.getZoom(), { animate: true, duration: 1.5 });
+    map.flyTo(position, map.getZoom(), { animate: true, duration: 2 });
   }, [position, map]);
   return null;
 }
